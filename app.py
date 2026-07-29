@@ -1,15 +1,12 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
-try:
-    import pandas_ta as ta
-except ImportError:
-    import ta
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 import requests
-import google.genai as genai
+import google.generativeai as genai
+import ta
 
 # Configurazione della pagina Streamlit
 st.set_page_config(
@@ -23,10 +20,11 @@ st.sidebar.title("⚙️ Configurazione")
 api_key = st.sidebar.text_input("Inserisci Google Gemini API Key:", type="password")
 
 # Inizializzazione Client AI
-client = None
+ai_configured = False
 if api_key:
     try:
-        client = genai.Client(api_key=api_key)
+        genai.configure(api_key=api_key)
+        ai_configured = True
         st.sidebar.success("API Key collegata con successo!")
     except Exception as e:
         st.sidebar.error("Errore nel collegamento dell'API Key.")
@@ -35,10 +33,12 @@ if api_key:
 def analizza_asset_avanzato(ticker_symbol):
     asset = yf.Ticker(ticker_symbol)
     df = asset.history(period="2y", interval="1d") 
-    if df.empty: return None, None
+    if df.empty or len(df) < 50: return None, None
         
-    df.ta.rsi(append=True)
-    df.columns = [str(c) for c in df.columns]
+    # Calcolo indicatori con libreria 'ta'
+    df['RSI'] = ta.momentum.rsi(df['Close'], window=14)
+    df['EMA_50'] = ta.trend.ema_indicator(df['Close'], window=50)
+    df['EMA_200'] = ta.trend.ema_indicator(df['Close'], window=200)
     
     df['Macro_Min'] = df['Low'].rolling(window=40, center=True).min()
     df['Macro_Max'] = df['High'].rolling(window=40, center=True).max()
@@ -79,8 +79,9 @@ def ottieni_sentiment_notizie(ticker_symbol):
         return "Sentiment non disponibile.", 0
 
 def genera_report_ai(ticker, ultimo_prezzo, rsi, pivots, sentiment_testo):
-    if not client:
+    if not ai_configured:
         return "⚠️ Inserisci una chiave API di Gemini valida nella barra laterale a sinistra per generare l'analisi reportistica."
+    
     prompt = f"""
     Agisci come l'algoritmo proprietario senior del canale 'WAVE_UP', specializzato in Onde di Elliott, Fibonacci e Pattern 1-2-3 Intraday/Swing.
     Analizza {ticker}. Prezzo: {ultimo_prezzo:.2f}, RSI: {rsi:.2f}, Pivots/Fibonacci: {pivots}, Sentiment: {sentiment_testo}.
@@ -102,7 +103,9 @@ def genera_report_ai(ticker, ultimo_prezzo, rsi, pivots, sentiment_testo):
     *Tutela del patrimonio e minimo guadagno garantito.*
     """
     try:
-        return client.models.generate_content(model='gemini-2.5-flash', contents=prompt).text
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        response = model.generate_content(prompt)
+        return response.text
     except Exception as e:
         return f"Errore durante la generazione AI: {str(e)}"
 
@@ -110,13 +113,13 @@ def disegna_grafico_web(df, ticker, ingresso, stop_loss, tp1, tp2, tp3):
     fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.08, row_width=[0.3, 0.7])
     fig.add_trace(go.Candlestick(x=df.index, open=df['Open'], high=df['High'], low=df['Low'], close=df['Close'], name='Prezzo'), row=1, col=1)
     
-    col_ema50 = [c for c in df.columns if 'EMA' in c and '50' in c]
-    if col_ema50: fig.add_trace(go.Scatter(x=df.index, y=df[col_ema50[0]], line=dict(color='orange', width=1.2), name='EMA 50'), row=1, col=1)
+    if 'EMA_50' in df.columns:
+        fig.add_trace(go.Scatter(x=df.index, y=df['EMA_50'], line=dict(color='orange', width=1.2), name='EMA 50'), row=1, col=1)
     
     ultima_data = df.index[-1]
     date_future = [ultima_data + pd.Timedelta(days=i) for i in range(1, 20)]
     
-    # Rettangoli Risk/Reward stile TradingView
+    # Rettangoli Risk/Reward
     fig.add_shape(type="rect", x0=df.index[-5], y0=stop_loss, x1=date_future[8], y1=ingresso, fillcolor="rgba(255, 0, 0, 0.2)", line=dict(color="red", width=1), row=1, col=1)
     fig.add_shape(type="rect", x0=df.index[-5], y0=ingresso, x1=date_future[8], y1=tp1, fillcolor="rgba(0, 180, 216, 0.25)", line=dict(color="#00b4d8", width=1), row=1, col=1)
     fig.add_shape(type="rect", x0=date_future[4], y0=ingresso, x1=date_future[13], y1=tp2, fillcolor="rgba(0, 150, 199, 0.2)", line=dict(color="#0096c7", width=1), row=1, col=1)
@@ -153,7 +156,7 @@ if modalita == "Analisi Singolo Asset":
                 sentiment_text, _ = ottieni_sentiment_notizie(ticker_input)
                 valuta = "EUR" if (".MI" in ticker_input or "EUR" in ticker_input or ".DE" in ticker_input) else "USD"
                 chiusura = float(df['Close'].iloc[-1])
-                rsi_val = float(df[[c for c in df.columns if 'RSI' in c][0]].iloc[-1])
+                rsi_val = float(df['RSI'].iloc[-1])
                 
                 # Calcoli operativi
                 p_in = chiusura
@@ -169,7 +172,7 @@ if modalita == "Analisi Singolo Asset":
                 m3.metric("Target TP1 (+6%)", conv(p_tp1))
                 m4.metric("RSI (14d)", f"{rsi_val:.1f}")
 
-                # Grafico e Report affiancati o sovrapposti
+                # Grafico e Report
                 st.plotly_chart(disegna_grafico_web(df, ticker_input, p_in, p_stop, p_tp1, p_tp2, p_tp3), use_container_width=True)
                 
                 st.markdown("---")
@@ -203,13 +206,12 @@ else:
                 try:
                     df = yf.Ticker(t).history(period="1y", interval="1d")
                     if df.empty or len(df) < 50: continue
-                    df.ta.rsi(append=True)
-                    df.ta.ema(length=50, append=True)
-                    df.columns = [str(c) for c in df.columns]
+                    df['RSI'] = ta.momentum.rsi(df['Close'], window=14)
+                    df['EMA_50'] = ta.trend.ema_indicator(df['Close'], window=50)
                     
                     pr = float(df['Close'].iloc[-1])
-                    rsi_v = float(df[[c for c in df.columns if 'RSI' in c][0]].iloc[-1])
-                    ema50_v = float(df[[c for c in df.columns if 'EMA' in c and '50' in c][0]].iloc[-1])
+                    rsi_v = float(df['RSI'].iloc[-1])
+                    ema50_v = float(df['EMA_50'].iloc[-1])
                     min_r = float(df['Low'].rolling(window=30).min().iloc[-1])
                     
                     score = 0
