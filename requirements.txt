@@ -4,5 +4,5 @@ pandas
 plotly
 vaderSentiment
 requests
-google-genai
-pandas-ta
+google-generativeai
+ta
