@@ -1,7 +1,8 @@
 streamlit
 yfinance
-pandas-ta
+pandas
 plotly
 vaderSentiment
 requests
 google-genai
+pandas-ta
