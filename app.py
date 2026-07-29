@@ -103,7 +103,7 @@ def genera_report_ai(ticker, ultimo_prezzo, rsi, pivots, sentiment_testo):
     *Tutela del patrimonio e minimo guadagno garantito.*
     """
     try:
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-2.5-flash')
         response = model.generate_content(prompt)
         return response.text
     except Exception as e:
