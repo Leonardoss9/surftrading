@@ -189,10 +189,20 @@ else:
     
     if st.button("Avvia Scansione Mercati", type="primary"):
         paniere = {
-            "CRYPTO": ["BTC-USD", "ETH-USD", "SOL-USD"],
-            "AZIONI USA": ["AAPL", "NVDA", "TSLA", "PLUG", "RIOT", "SMCI", "NIO"],
-            "AZIONI EU": ["STLAM.MI", "RACE.MI", "UCG.MI"],
-            "ETF": ["SPY", "QQQ", "VWCE.DE"]
+            "CRYPTO": ["BTC-USD", "ETH-USD", "SOL-USD", "XRP-USD", "ADA-USD"],
+            "AZIONI USA": [
+                "AAPL", "NVDA", "TSLA", "AMZN", "BABA", "GME", 
+                "PLUG", "RIOT", "SMCI", "NIO", "DXYZ"
+            ],
+            "AZIONI EU": ["STLAM.MI", "RACE.MI", "UCG.MI", "ENI.MI", "ASML.AS"],
+            "ETF": [
+                "QQQ",      # Nasdaq 100
+                "SPY",      # S&P 500
+                "VWCE.DE",  # All-World
+                "QTUM",     # Quantum Computing ETF (USD)
+                "ARKX",     # Space Exploration & Innovation ETF
+                "ITA"       # Aerospace & Defense / Space Innovators
+            ]
         }
         risultati = []
         progress_bar = st.progress(0)
